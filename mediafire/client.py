@@ -538,7 +538,11 @@ class MediaFireClient(object):
             else:
                 out_fd = open(target, 'wb')
 
-            checksum = hashlib.sha256()
+            if len(resource['hash']) == 32:
+                checksum = hashlib.md5()
+            else:
+                checksum = hashlib.sha256()
+            
             for chunk in response.iter_content(chunk_size=4096):
                 if chunk:
                     out_fd.write(chunk)
