@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-
 """Command-line interface to MediaFire Simple File Sharing and Storage"""
 
 import argparse
 import logging
 import os
+import signal
 import sys
 
 from pprint import pprint
@@ -19,11 +19,48 @@ logging.basicConfig(format=LOG_FORMAT, level=logging.WARNING)
 
 APP_ID = '42511'
 
-
 logging.getLogger("mediafire.client").setLevel(logging.INFO)
 logging.getLogger(
     "requests.packages.urllib3.connectionpool").setLevel(logging.WARNING)
 
+EXIT = False
+
+def signal_handler(sig, frame):
+    EXIT = True
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+
+def do_folder_download(client, args):
+    if EXIT:
+        return None
+
+    for item in client.get_folder_contents_iter(args.uri):
+
+
+        """ Download a Folder"""
+        try:
+            if isinstance(item, Folder):
+                # type flag
+                child_args = type("obj",(object,),
+                                  dict(uri=args.uri, dest_path=args.dest_path))
+
+                child_args.uri = child_args.uri + '/' + item['name']
+                print("Downloading Directory {}".format(child_args.uri))
+                do_folder_download(client, child_args)
+                print("Downloaded Directory {}".format(child_args.uri))
+            else:
+                file_path = args.uri[6:]
+                dest_file_path = args.dest_path + file_path + '/'
+                os.makedirs(dest_file_path, exist_ok=True)
+                src_uri = args.uri + '/' + item['filename']
+                print("Downloading {} to {}".format(src_uri, dest_file_path))
+                client.download_file(src_uri, dest_file_path)
+                print("Downloaded {}".format(src_uri))
+        except Exception as e:
+            print("Exception: {}".format(e))
+
+    return True
 
 def do_ls(client, args):
     """List directory"""
@@ -184,6 +221,13 @@ def main():  # pylint: disable=too-many-statements
                                    help=do_file_show.__doc__)
     subparser.add_argument('uris', nargs='+',
                            help='MediaFire File URI[s] to print out')
+    # folder-download
+    subparser = actions.add_parser('folder-download',
+                                   help=do_folder_download.__doc__)
+    subparser.add_argument('uri', nargs='?',
+                           help='MediaFire URI',
+                           default='mf:///')
+    subparser.add_argument('dest_path', help='Destination path')
 
     # folder-create
     subparser = actions.add_parser('folder-create',
@@ -256,6 +300,7 @@ def main():  # pylint: disable=too-many-statements
         "file-download": do_file_download,
         "file-show": do_file_show,
         "ls": do_ls,
+        'folder-download': do_folder_download,
         "folder-create": do_folder_create,
         "resource-delete": do_resource_delete,
         "file-update-metadata": do_file_update_metadata,
